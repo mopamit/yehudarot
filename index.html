@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>חידון השופר - מו"פ אמית</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <!-- Html2Canvas for screenshots -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700;900&display=swap');
+        
+        body {
+            font-family: 'Heebo', sans-serif;
+            background: linear-gradient(135deg, #fdfbf7 0%, #e2d1c3 100%);
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        .option-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .option-card:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .option-card.selected {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+
+        /* Review Mode Styles */
+        .option-review-correct-user {
+            background-color: #22c55e !important; /* Green 500 */
+            color: white !important;
+            border-color: #16a34a !important;
+        }
+        
+        .option-review-wrong-user {
+            background-color: #ef4444 !important; /* Red 500 */
+            color: white !important;
+            border-color: #dc2626 !important;
+        }
+
+        .option-review-correct-missed {
+            background-color: #dcfce7 !important; /* Green 100 - Light/Pale Green */
+            color: #166534 !important; /* Green 800 */
+            border-color: #86efac !important;
+            border-style: dashed !important;
+        }
+        
+        .option-review-neutral {
+            opacity: 0.6;
+            background-color: #f3f4f6;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c1a17c; 
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 text-slate-800">
+    <div id="root" class="w-full max-w-2xl"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Original Data (Source of Truth) ---
+        const rawQuestionsData = [
+            {
+                id: 1,
+                text: "מהי מצוות עשה המיוחדת לראש השנה?",
+                options: [
+                    { id: 'a', text: "לאכול תפוח בדבש" },
+                    { id: 'b', text: "לשמוע תרועת שופר בראש השנה" },
+                    { id: 'c', text: "לשמוע את חזרת הש\"ץ" },
+                    { id: 'd', text: "לתת צדקה בראש השנה" }
+                ],
+                correctAnswer: 'b'
+            },
+            {
+                id: 2,
+                text: "ראש השנה הוא חג שחוגגים בחודש תשרי. לפי הפסוקים בתורה, מהו מספר החודש?",
+                options: [
+                    { id: 'a', text: "הראשון" },
+                    { id: 'b', text: "השני" },
+                    { id: 'c', text: "השלישי" },
+                    { id: 'd', text: "השביעי" }
+                ],
+                correctAnswer: 'd'
+            },
+            {
+                id: 3,
+                text: "מה משמעות המילה \"תרועה\" לפי אונקלוס?",
+                options: [
+                    { id: 'a', text: "שמחה ויציבות" },
+                    { id: 'b', text: "שברון ובכי" },
+                    { id: 'c', text: "מילת קסם שמרחיקה עובדי עבודה זרה" },
+                    { id: 'd', text: "הודאה ותודה" }
+                ],
+                correctAnswer: 'b'
+            },
+            {
+                id: 4,
+                text: "בתורה, ראש השנה, נקרא \"יום תרועה\", מה צריך לעשות לפני ואחרי כל תרועה?",
+                options: [
+                    { id: 'a', text: "תקיעה לפני וכלום אחרי" },
+                    { id: 'b', text: "רק תרועה בלי שום דבר לפני ואחרי" },
+                    { id: 'c', text: "שום דבר לפני, ותקיעה אחרי" },
+                    { id: 'd', text: "תקיעה לפני ואחרי תרועה" }
+                ],
+                correctAnswer: 'd'
+            },
+            {
+                id: 5,
+                text: "לפי חז\"ל, כמה סדרות של \"תקיעה תרועה ותקיעה\" צריך לשמוע בראש השנה?",
+                options: [
+                    { id: 'a', text: "אחת" },
+                    { id: 'b', text: "שתיים" },
+                    { id: 'c', text: "שלוש" },
+                    { id: 'd', text: "ארבע" }
+                ],
+                correctAnswer: 'c'
+            },
+            {
+                id: 6,
+                text: "מדוע הונהגה התקנה לתקוע \"בתרועה\" שלוש אפשרויות: גם שברים וגם תרועה וגם שברים־תרועה?",
+                options: [
+                    { id: 'a', text: "כדי להרבות שמחה" },
+                    { id: 'b', text: "כדי להאריך את זמן התפילה" },
+                    { id: 'c', text: "כדי להיות כמו המלאכים" },
+                    { id: 'd', text: "כדי לאחד את כל הדיעות בהבנת המילה \"תרועה\"" }
+                ],
+                correctAnswer: 'd'
+            },
+            {
+                id: 7,
+                text: "מי והיכן תיקן לתקוע בשלושת סוגי התרועה?",
+                options: [
+                    { id: 'a', text: "רבי עקיבא בירושלים" },
+                    { id: 'b', text: "רבי יהודה בבבל" },
+                    { id: 'c', text: "רבי אבהו בקיסרי" },
+                    { id: 'd', text: "רבן יוחנן בן זכאי ביבנה" }
+                ],
+                correctAnswer: 'c'
+            },
+            {
+                id: 8,
+                text: "כיום להלכה, כמה קולות מינימום צריך לשמוע בראש השנה?",
+                options: [
+                    { id: 'a', text: "30" },
+                    { id: 'b', text: "9" },
+                    { id: 'c', text: "100" },
+                    { id: 'd', text: "1" }
+                ],
+                correctAnswer: 'a'
+            },
+            {
+                id: 9,
+                text: "יעקב לא הלך לבית הכנסת, רחל אשתו אמרה לו שבגלל זה כבר לא יכול לשמוע שופר. כי שופר אפשר לשמוע רק בתפילה בבית הכנסת. יעקב אמר לה שלדעתו כל אחד בכל גיל יכול לתקוע בשופר ושאפשר לשמוע שופר בכל מקום ולא רק בבית הכנסת בתפילה. מי צודק?",
+                options: [
+                    { id: 'a', text: "רחל, שופר זה רלוונטי רק בבית הכנסת" },
+                    { id: 'b', text: "שניהם טועים, שופר אפשר לשמוע בכל מקום, ולא רק בתפילה אבל התוקע בשופר חייב להיות בר מצווה" },
+                    { id: 'c', text: "יעקב, שופר זה משהו לכולם" }
+                ],
+                correctAnswer: 'b'
+            },
+            {
+                id: 10,
+                text: "כיום מקובל מנהג של מאה תקיעות, ממתי מנהג זה קיים?",
+                options: [
+                    { id: 'a', text: "תקנה של משה רבנו בהר סיני" },
+                    { id: 'b', text: "מנהג מימי בית שני" },
+                    { id: 'c', text: "מנהג מתקופת הגאונים" },
+                    { id: 'd', text: "מנהג שהונהג לאחר הגלות בספרד" }
+                ],
+                correctAnswer: 'c'
+            }
+        ];
+
+        const optionLetters = ['א', 'ב', 'ג', 'ד'];
+
+        // --- Helper Function for Shuffling ---
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
+        const TrophyIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-20 h-20 text-yellow-500 mx-auto animate-bounce">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                <path d="M4 22h16"/>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+        );
+        
+        const MehIcon = () => (
+             <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-amber-500 mb-2"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="15" x2="16" y2="15"></line><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+        );
+
+        const SadIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-red-500 mb-2"><circle cx="12" cy="12" r="10"></circle><path d="M16 16s-1.5-2-4-2-4 2-4 2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+        );
+
+        const DownloadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+        const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>;
+        const ArrowRightIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>;
+        const ArrowLeftIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>;
+        const CloseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
+
+        // --- Main App Component ---
+        const App = () => {
+            const [gameState, setGameState] = useState('welcome'); // welcome, playing, finished, reviewing
+            const [activeQuestions, setActiveQuestions] = useState([]);
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            const [reviewQuestionIndex, setReviewQuestionIndex] = useState(0);
+            const [userAnswers, setUserAnswers] = useState({});
+            const resultRef = useRef(null);
+
+            const handleStart = () => {
+                // Shuffle questions and options on start
+                const shuffled = rawQuestionsData.map(q => ({
+                    ...q,
+                    options: shuffleArray(q.options)
+                }));
+                
+                setActiveQuestions(shuffled);
+                setCurrentQuestionIndex(0);
+                setUserAnswers({});
+                setGameState('playing');
+            };
+
+            const handleAnswer = (optionId) => {
+                setUserAnswers(prev => ({
+                    ...prev,
+                    [activeQuestions[currentQuestionIndex].id]: optionId
+                }));
+
+                setTimeout(() => {
+                    if (currentQuestionIndex < activeQuestions.length - 1) {
+                        setCurrentQuestionIndex(prev => prev + 1);
+                    } else {
+                        setGameState('finished');
+                        triggerConfettiIfNeeded();
+                    }
+                }, 400);
+            };
+
+            const startReview = () => {
+                setReviewQuestionIndex(0);
+                setGameState('reviewing');
+            };
+
+            const nextReviewQuestion = () => {
+                if (reviewQuestionIndex < activeQuestions.length - 1) {
+                    setReviewQuestionIndex(prev => prev + 1);
+                }
+            };
+
+            const prevReviewQuestion = () => {
+                if (reviewQuestionIndex > 0) {
+                    setReviewQuestionIndex(prev => prev - 1);
+                }
+            };
+
+            const returnToResults = () => {
+                setGameState('finished');
+            };
+
+            const calculateScore = () => {
+                let correctCount = 0;
+                activeQuestions.forEach(q => {
+                    if (userAnswers[q.id] === q.correctAnswer) {
+                        correctCount++;
+                    }
+                });
+                return correctCount * 10;
+            };
+
+            const triggerConfettiIfNeeded = () => {
+                const duration = 3000;
+                const end = Date.now() + duration;
+                (function frame() {
+                    confetti({
+                        particleCount: 5,
+                        angle: 60,
+                        spread: 55,
+                        origin: { x: 0 },
+                        colors: ['#c1a17c', '#3b82f6', '#f59e0b']
+                    });
+                    confetti({
+                        particleCount: 5,
+                        angle: 120,
+                        spread: 55,
+                        origin: { x: 1 },
+                        colors: ['#c1a17c', '#3b82f6', '#f59e0b']
+                    });
+                    if (Date.now() < end) {
+                        requestAnimationFrame(frame);
+                    }
+                }());
+            };
+
+            const downloadScreenshot = () => {
+                if (resultRef.current) {
+                    html2canvas(resultRef.current).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = 'תוצאות-חידון-שופר.png';
+                        link.href = canvas.toDataURL();
+                        link.click();
+                    });
+                }
+            };
+
+            const getScoreData = (score) => {
+                if (score >= 80) {
+                    return {
+                        colorClass: "text-green-600",
+                        bgClass: "bg-green-50 border-green-200",
+                        feedback: "כל הכבוד! הפגנת ידע מצוין בהלכות ומנהגי השופר.",
+                        icon: <TrophyIcon />
+                    };
+                } else if (score >= 60) {
+                    return {
+                        colorClass: "text-amber-600",
+                        bgClass: "bg-amber-50 border-amber-200",
+                        feedback: "יפה מאוד! יש לך ידע בסיסי טוב, כדאי לחזור על הדברים שפחות ישבו חזק.",
+                        icon: <MehIcon />
+                    };
+                } else {
+                    return {
+                        colorClass: "text-red-600",
+                        bgClass: "bg-red-50 border-red-200",
+                        feedback: "לא נורא, זו הזדמנות מעולה ללמוד! עברו על התשובות ונסו שוב.",
+                        icon: <SadIcon />
+                    };
+                }
+            };
+
+            // --- Render Logic with Persistent Logo ---
+            let content = null;
+
+            if (gameState === 'welcome') {
+                content = (
+                    <div className="glass-panel w-full p-8 rounded-3xl text-center animate-fade-in flex flex-col items-center">
+                        <div className="mb-6">
+                            <img src="shofar.png" alt="שופר" className="w-32 h-auto mx-auto object-contain" />
+                        </div>
+                        <h1 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">חידון השופר</h1>
+                        <p className="text-lg text-slate-600 mb-8 max-w-md">
+                            האם אתם מוכנים לבדוק את הידע שלכם בנושאי ראש השנה והשופר?
+                        </p>
+                        <button 
+                            onClick={handleStart}
+                            className="bg-slate-900 hover:bg-slate-800 text-white text-xl font-bold py-4 px-12 rounded-2xl shadow-lg transform transition hover:scale-105 active:scale-95"
+                        >
+                            התחל בחידון
+                        </button>
+                        <div className="mt-12 text-slate-400 text-sm font-medium">
+                            מו"פ אמית &copy; {new Date().getFullYear()}
+                        </div>
+                    </div>
+                );
+            } else if (gameState === 'playing') {
+                const currentQuestion = activeQuestions[currentQuestionIndex];
+                const progress = ((currentQuestionIndex) / activeQuestions.length) * 100;
+
+                content = (
+                    <div className="w-full max-w-2xl">
+                        <div className="mb-6 bg-white/50 h-3 rounded-full overflow-hidden w-full shadow-inner">
+                            <div 
+                                className="h-full bg-amber-500 transition-all duration-500 ease-out"
+                                style={{ width: `${progress}%` }}
+                            ></div>
+                        </div>
+
+                        <div className="glass-panel p-6 md:p-10 rounded-3xl animate-fade-in shadow-xl min-h-[400px] flex flex-col justify-center">
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-sm font-bold">
+                                    שאלה {currentQuestionIndex + 1} מתוך {activeQuestions.length}
+                                </span>
+                            </div>
+
+                            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-8 leading-snug">
+                                {currentQuestion.text}
+                            </h2>
+
+                            <div className="space-y-3">
+                                {currentQuestion.options.map((option, idx) => (
+                                    <button
+                                        key={option.id}
+                                        onClick={() => handleAnswer(option.id)}
+                                        className="option-card w-full text-right p-4 md:p-5 rounded-xl border-2 border-transparent bg-white/60 hover:bg-white text-slate-700 font-medium text-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    >
+                                        <span className="ml-3 font-bold text-amber-600/50">{optionLetters[idx]}.</span>
+                                        {option.text}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="mt-8 text-center text-slate-400 text-sm font-medium">
+                            מו"פ אמית
+                        </div>
+                    </div>
+                );
+            } else if (gameState === 'finished') {
+                const score = calculateScore();
+                const scoreData = getScoreData(score);
+                
+                content = (
+                    <div className="w-full max-w-3xl">
+                        <div ref={resultRef} className="glass-panel p-8 md:p-12 rounded-3xl text-center animate-fade-in bg-white relative">
+                            <div className="mb-4">
+                                {scoreData.icon}
+                            </div>
+                            
+                            <h2 className="text-3xl font-bold text-slate-800 mb-2">
+                                {score >= 80 ? 'מצוין!' : score >= 60 ? 'סיום טוב!' : 'סיימת!'}
+                            </h2>
+                            <p className="text-lg text-slate-600 mb-6 font-medium max-w-md mx-auto">
+                                {scoreData.feedback}
+                            </p>
+                            
+                            <div className={`mb-8 p-6 rounded-2xl border inline-block min-w-[200px] ${scoreData.bgClass}`}>
+                                <div className={`text-sm uppercase tracking-wider font-bold mb-1 opacity-80 ${scoreData.colorClass}`}>הציון שלך</div>
+                                <div className={`text-6xl font-black ${scoreData.colorClass}`}>{score}</div>
+                                <div className={`text-sm font-medium mt-1 opacity-70 ${scoreData.colorClass}`}>מתוך 100</div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8 no-print">
+                                <button 
+                                    onClick={startReview}
+                                    className="flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3 px-6 rounded-xl transition shadow-sm"
+                                >
+                                    <EyeIcon />
+                                    צפה בתשובות
+                                </button>
+                                <button 
+                                    onClick={downloadScreenshot}
+                                    className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg"
+                                >
+                                    <DownloadIcon />
+                                    שמור תוצאה
+                                </button>
+                                <button 
+                                    onClick={handleStart}
+                                    className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg"
+                                >
+                                    נסה שוב
+                                </button>
+                            </div>
+
+                            <div className="mt-8 pt-4 border-t border-slate-100">
+                                <p className="text-slate-400 text-sm font-bold">מו"פ אמית</p>
+                            </div>
+                        </div>
+                    </div>
+                );
+            } else if (gameState === 'reviewing') {
+                const currentQuestion = activeQuestions[reviewQuestionIndex];
+                const userAnswerId = userAnswers[currentQuestion.id];
+                const isCorrect = userAnswerId === currentQuestion.correctAnswer;
+                
+                content = (
+                    <div className="w-full max-w-2xl relative">
+                        {/* Close Review Button */}
+                        <button 
+                            onClick={returnToResults}
+                            className="absolute -top-12 left-0 text-slate-600 hover:text-slate-900 flex items-center gap-1 font-bold bg-white/50 hover:bg-white/80 px-3 py-1 rounded-full transition"
+                        >
+                            <CloseIcon />
+                            סגור חזרה
+                        </button>
+
+                        <div className="glass-panel p-6 md:p-10 rounded-3xl animate-fade-in shadow-xl min-h-[400px] flex flex-col relative">
+                            {/* Score Badge */}
+                            <div className={`absolute top-6 left-6 px-3 py-1 rounded-full text-sm font-black border ${isCorrect ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                                {isCorrect ? '10 נק׳' : '0 נק׳'}
+                            </div>
+
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-sm font-bold">
+                                    שאלה {reviewQuestionIndex + 1} מתוך {activeQuestions.length}
+                                </span>
+                            </div>
+
+                            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-8 leading-snug">
+                                {currentQuestion.text}
+                            </h2>
+
+                            <div className="space-y-3 mb-8">
+                                {currentQuestion.options.map((option, idx) => {
+                                    let optionClass = "bg-white/60 text-slate-700 option-review-neutral"; // Default
+                                    
+                                    // User Selected This Option
+                                    if (option.id === userAnswerId) {
+                                        if (isCorrect) {
+                                            optionClass = "option-review-correct-user shadow-md scale-[1.01]";
+                                        } else {
+                                            optionClass = "option-review-wrong-user shadow-md scale-[1.01]";
+                                        }
+                                    } 
+                                    // This is the correct option, but user missed it
+                                    else if (option.id === currentQuestion.correctAnswer && !isCorrect) {
+                                        optionClass = "option-review-correct-missed shadow-sm";
+                                    }
+
+                                    return (
+                                        <div
+                                            key={option.id}
+                                            className={`w-full text-right p-4 md:p-5 rounded-xl border-2 border-transparent font-medium text-lg transition-all ${optionClass}`}
+                                        >
+                                            <span className="ml-3 font-bold opacity-50">{optionLetters[idx]}.</span>
+                                            {option.text}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Review Navigation */}
+                            <div className="mt-auto flex justify-between items-center pt-4 border-t border-slate-200/50">
+                                <button 
+                                    onClick={nextReviewQuestion}
+                                    disabled={reviewQuestionIndex === activeQuestions.length - 1}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition ${reviewQuestionIndex === activeQuestions.length - 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                    הבא
+                                    <ArrowLeftIcon />
+                                </button>
+                                
+                                <button 
+                                    onClick={prevReviewQuestion}
+                                    disabled={reviewQuestionIndex === 0}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition ${reviewQuestionIndex === 0 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                    <ArrowRightIcon />
+                                    הקודם
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <>
+                    {/* Fixed Logo */}
+                    <img 
+                        src="logo.png" 
+                        alt="לוגו" 
+                        className="fixed top-4 right-4 w-20 md:w-28 h-auto z-50 object-contain drop-shadow-md"
+                    />
+                    {content}
+                </>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
